@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Accumulator</title>
+<meta name="description" content="A camera that builds an exposure over time, and lets you scrub where it starts and ends.">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#0A1622">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="./icon-192.png">
+<style>
+:root{
+  --ink:#0A1622;
+  --ink2:#0F1F2E;
+  --ink3:#152B3E;
+  --line:#1E3A52;
+  --blue:#3C6E97;
+  --sky:#8FBEDC;
+  --paper:#E8E4D9;
+  --dim:#6E8CA4;
+  --rust:#C05A34;
+  --rust-lo:#7A3620;
+  --pad:14px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  margin:0;background:var(--ink);color:var(--paper);
+  font-family:"Segoe UI",Roboto,-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;
+  font-size:15px;line-height:1.4;font-variant-numeric:tabular-nums;
+  overscroll-behavior:none;touch-action:manipulation;overflow:hidden;
+  display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+button,select,input{font:inherit;color:inherit;font-variant-numeric:tabular-nums}
+button{background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+
+/* ---------- viewfinder ---------- */
+#stage{
+  position:relative;flex:1 1 auto;min-height:28vh;background:#050C13;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+#frame{position:relative;max-width:100%;max-height:100%;aspect-ratio:3/4;background:#050C13}
+#video,#out{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+#out{opacity:0;transition:opacity .18s linear;image-rendering:auto}
+#out.on{opacity:1}
+#stage.mirror #video,#stage.mirror #out{transform:scaleX(-1)}
+
+#hud{position:absolute;left:0;right:0;top:0;padding:10px 12px;display:flex;gap:10px;
+  align-items:flex-start;justify-content:space-between;pointer-events:none;
+  background:linear-gradient(#050C13cc,#050C1300)}
+.tag{font-size:12px;letter-spacing:.02em;color:var(--sky);background:#050C1399;
+  padding:3px 7px;border:1px solid var(--line)}
+.tag.rec{color:var(--paper);background:var(--rust);border-color:var(--rust)}
+.tag.rec::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--paper);margin-right:6px;vertical-align:1px;animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.tag.rec::before{animation:none}}
+
+#gate{position:absolute;inset:0;display:flex;flex-direction:column;gap:18px;
+  align-items:center;justify-content:center;text-align:center;padding:24px;background:#050C13}
+#gate h1{margin:0;font-size:26px;font-weight:600;letter-spacing:-.01em}
+#gate p{margin:0;max-width:34ch;color:var(--dim);font-size:14px}
+#gate.hide{display:none}
+
+/* ---------- density strip / trim ---------- */
+#trim{position:relative;height:76px;background:var(--ink2);border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);touch-action:none;user-select:none;overflow:hidden}
+#strip{position:absolute;inset:0;width:100%;height:100%;display:block}
+.handle{position:absolute;top:0;bottom:0;width:2px;background:var(--rust);pointer-events:none}
+.handle::after{content:"";position:absolute;top:0;left:-9px;width:20px;height:14px;background:var(--rust)}
+.handle.b::after{top:auto;bottom:0}
+#playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--paper);opacity:.55;pointer-events:none}
+#trimEmpty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:var(--dim);font-size:13px;pointer-events:none}
+
+/* ---------- readout ---------- */
+#readout{display:flex;gap:16px;padding:8px var(--pad);font-size:12.5px;color:var(--dim);
+  border-bottom:1px solid var(--line);flex-wrap:wrap}
+#readout b{font-weight:600;color:var(--paper)}
+
+/* ---------- transport ---------- */
+#transport{display:flex;align-items:center;gap:6px;padding:10px var(--pad);
+  border-bottom:1px solid var(--line)}
+.tbtn{flex:1;height:46px;border:1px solid var(--line);background:var(--ink2);color:var(--paper);
+  display:flex;align-items:center;justify-content:center}
+.tbtn:disabled{opacity:.3}
+.tbtn svg{width:20px;height:20px;fill:currentColor}
+#recBtn{flex:1.6;background:var(--rust);border-color:var(--rust);font-weight:600;font-size:14px;gap:8px}
+#recBtn.stop{background:var(--ink2);border-color:var(--rust);color:var(--rust)}
+
+/* ---------- panel ---------- */
+#panel{flex:1 1 auto;overflow-y:auto;max-height:36vh;padding:0 var(--pad) 18px}
+.row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.row:last-child{border-bottom:0}
+.row .lbl{flex:0 0 72px;color:var(--dim);font-size:13px}
+.seg{display:flex;flex:1;border:1px solid var(--line)}
+.seg button{flex:1;padding:9px 2px;font-size:12.5px;color:var(--dim);background:var(--ink2);
+  border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed=true]{background:var(--blue);color:var(--paper)}
+input[type=range]{flex:1;accent-color:var(--sky);background:none;min-width:0}
+.val{flex:0 0 58px;text-align:right;font-size:13px}
+select{flex:1;min-width:0;background:var(--ink2);border:1px solid var(--line);padding:9px 8px}
+.abtn{padding:10px 12px;border:1px solid var(--line);background:var(--ink2);font-size:13.5px;flex:1}
+.abtn.ghost{color:var(--sky)}
+details{border-bottom:1px solid var(--line)}
+summary{padding:12px 0;cursor:pointer;color:var(--sky);font-size:13.5px;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"+ ";color:var(--dim)}
+details[open] summary::before{content:"– "}
+#status{padding:10px var(--pad) 0;font-size:12.5px;color:var(--dim);min-height:1.4em}
+.sw{display:flex;align-items:center;gap:8px}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--rust)}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="frame">
+    <video id="video" playsinline autoplay muted></video>
+    <canvas id="out"></canvas>
+    <div id="hud">
+      <span class="tag" id="tagMode">Mean</span>
+      <span class="tag" id="tagTime">0.0s</span>
+    </div>
+  </div>
+  <div id="gate">
+    <h1>Accumulator</h1>
+    <p>A camera that builds one exposure out of many frames. Record, then scrub back through the build and trim where it starts and ends.</p>
+    <button class="abtn ghost" id="startCam" style="flex:0;padding:12px 22px">Turn on camera</button>
+  </div>
+</div>
+
+<div id="trim" role="group" aria-label="Exposure range">
+  <canvas id="strip"></canvas>
+  <div class="handle a" id="hA" hidden></div>
+  <div class="handle b" id="hB" hidden></div>
+  <div id="playhead" hidden></div>
+  <div id="trimEmpty">Nothing recorded yet</div>
+</div>
+
+<div id="readout">
+  <span>Frames <b id="rFrames">0 – 0</b></span>
+  <span>In exposure <b id="rCount">0</b></span>
+  <span>Buffer <b id="rBuf">0%</b></span>
+</div>
+
+<div id="transport">
+  <button class="tbtn" id="toStart" disabled aria-label="Jump to start">
+    <svg viewBox="0 0 24 24"><path d="M7 5h2v14H7zM19 5v14l-9-7z"/></svg></button>
+  <button class="tbtn" id="rew" disabled aria-label="Rewind the exposure">
+    <svg viewBox="0 0 24 24"><path d="M11 5v14l-9-7zM22 5v14l-9-7z"/></svg></button>
+  <button class="tbtn" id="play" disabled aria-label="Play the build">
+    <svg viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></svg></button>
+  <button class="tbtn" id="toEnd" disabled aria-label="Jump to end">
+    <svg viewBox="0 0 24 24"><path d="M15 5h2v14h-2zM5 5l9 7-9 7z"/></svg></button>
+  <button class="tbtn" id="recBtn" disabled>Record</button>
+</div>
+
+<div id="panel">
+  <div class="row">
+    <span class="lbl">Blend</span>
+    <div class="seg" id="modeSeg">
+      <button data-mode="mean" aria-pressed="true">Mean</button>
+      <button data-mode="sum" aria-pressed="false">Sum</button>
+      <button data-mode="lighten" aria-pressed="false">Lighten</button>
+      <button data-mode="darken" aria-pressed="false">Darken</button>
+    </div>
+  </div>
+  <div class="row">
+    <span class="lbl">Exposure</span>
+    <input type="range" id="ev" min="-4" max="4" step="0.05" value="0">
+    <span class="val" id="evVal">0.00</span>
+  </div>
+  <div class="row">
+    <span class="lbl">Window</span>
+    <label class="sw" style="flex:1;font-size:13.5px">
+      <input type="checkbox" id="lockWin"> Trail the last
+    </label>
+    <input type="range" id="winLen" min="2" max="240" step="1" value="48" style="flex:1 1 130px">
+    <span class="val" id="winVal">48f</span>
+  </div>
+  <div class="row">
+    <button class="abtn" id="savePng">Save image</button>
+    <button class="abtn" id="saveVid">Export build</button>
+    <button class="abtn" id="clear">Clear</button>
+  </div>
+
+  <details>
+    <summary>Capture settings</summary>
+    <div class="row">
+      <span class="lbl">Camera</span>
+      <select id="camSel"></select>
+    </div>
+    <div class="row">
+      <span class="lbl">Detail</span>
+      <div class="seg" id="resSeg">
+        <button data-w="320" aria-pressed="false">Low</button>
+        <button data-w="480" aria-pressed="true">Mid</button>
+        <button data-w="640" aria-pressed="false">High</button>
+        <button data-w="854" aria-pressed="false">Max</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="lbl">Rate</span>
+      <input type="range" id="fps" min="2" max="30" step="1" value="12">
+      <span class="val" id="fpsVal">12/s</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Length</span>
+      <input type="range" id="cap" min="60" max="1200" step="20" value="360">
+      <span class="val" id="capVal">30s</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Light</span>
+      <label class="sw" style="flex:1;font-size:13.5px">
+        <input type="checkbox" id="torch"> Torch
+      </label>
+      <label class="sw" style="flex:1;font-size:13.5px">
+        <input type="checkbox" id="mirror"> Mirror
+      </label>
+    </div>
+    <div class="row" id="installRow" hidden>
+      <button class="abtn ghost" id="install">Add to home screen</button>
+    </div>
+  </details>
+
+  <div id="status">Camera is off.</div>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+
+const video = $("#video");
+const out   = $("#out");
+const octx  = out.getContext("2d");
+const cap   = document.createElement("canvas");
+const cctx  = cap.getContext("2d",{willReadFrequently:true});
+const strip = $("#strip");
+const sctx  = strip.getContext("2d");
+
+const S = {
+  stream:null, track:null, devices:[], devId:null, facing:"environment",
+  W:0, H:0, aspect:3/4,
+  frames:[], lum:[], maxFrames:360, fps:12,
+  acc:null, img:null, accA:-1, accB:-1,
+  a:0, b:-1,
+  mode:"mean", ev:0,
+  recording:false, lockWin:false, winLen:48,
+  play:0, head:0,
+  wake:null, exporting:false
+};
+
+function status(t){ $("#status").textContent = t; }
+const secs = n => (n / S.fps);
+const fmt  = n => secs(n).toFixed(1) + "s";
+
+/* ---------------- camera ---------------- */
+async function startCamera(){
+  try{
+    stopStream();
+    const c = { audio:false, video: S.devId
+      ? { deviceId:{exact:S.devId}, width:{ideal:1280}, height:{ideal:720} }
+      : { facingMode:S.facing, width:{ideal:1280}, height:{ideal:720} } };
+    S.stream = await navigator.mediaDevices.getUserMedia(c);
+    video.srcObject = S.stream;
+    await video.play();
+    S.track = S.stream.getVideoTracks()[0];
+    S.devId = S.track.getSettings().deviceId || S.devId;
+    $("#torch").checked = false;
+    $("#gate").classList.add("hide");
+    $("#recBtn").disabled = false;
+    await listDevices();
+    setGeometry();
+    checkTorch();
+    status("Ready. Press record to start an exposure.");
+  }catch(e){
+    status("Camera did not open: " + e.message + ". Check permissions, and that the page is on https.");
+  }
+}
+function stopStream(){ if(S.stream){ S.stream.getTracks().forEach(t=>t.stop()); S.stream=null; } }
+
+async function listDevices(){
+  try{
+    const d = await navigator.mediaDevices.enumerateDevices();
+    S.devices = d.filter(x=>x.kind==="videoinput");
+    const sel = $("#camSel"); sel.innerHTML = "";
+    S.devices.forEach((dev,i)=>{
+      const o = document.createElement("option");
+      o.value = dev.deviceId; o.textContent = dev.label || ("Camera " + (i+1));
+      if(dev.deviceId === S.devId) o.selected = true;
+      sel.appendChild(o);
+    });
+  }catch(e){}
+}
+function checkTorch(){
+  let ok=false;
+  try{ ok = !!(S.track.getCapabilities && S.track.getCapabilities().torch); }catch(e){}
+  $("#torch").disabled = !ok;
+}
+function setGeometry(){
+  const st = S.track.getSettings();
+  const vw = st.width || video.videoWidth || 1280;
+  const vh = st.height || video.videoHeight || 720;
+  S.aspect = vw/vh;
+  $("#frame").style.aspectRatio = vw + "/" + vh;
+  const target = +document.querySelector("#resSeg [aria-pressed=true]").dataset.w;
+  const W = Math.min(target, vw);
+  const H = Math.max(2, Math.round(W/S.aspect/2)*2);
+  if(W !== S.W || H !== S.H){
+    S.W = W; S.H = H;
+    cap.width = out.width = W; cap.height = out.height = H;
+    S.acc = new Float32Array(W*H*3);
+    S.img = octx.createImageData(W,H);
+    clearFrames();
+  }
+}
+
+/* ---------------- buffer ---------------- */
+function clearFrames(){
+  S.frames.length = 0; S.lum.length = 0;
+  S.accA = S.accB = -1; S.a = 0; S.b = -1; S.head = 0; S.play = 0;
+  out.classList.remove("on");
+  drawStrip(); updateUI();
+}
+
+function grab(){
+  const {W,H} = S;
+  cctx.drawImage(video,0,0,W,H);
+  const d = cctx.getImageData(0,0,W,H).data;
+  const f = new Uint8ClampedArray(W*H*3);
+  let sum = 0;
+  for(let i=0,j=0; i<d.length; i+=4){
+    const r=d[i], g=d[i+1], b=d[i+2];
+    f[j++]=r; f[j++]=g; f[j++]=b;
+    sum += (r*77 + g*150 + b*29) >> 8;
+  }
+  S.frames.push(f);
+  S.lum.push(sum/(W*H)/255);
+}
+
+/* ---------------- accumulation ---------------- */
+const additive = () => S.mode==="mean" || S.mode==="sum";
+
+function addF(i,sign){
+  const f = S.frames[i], acc = S.acc, n = acc.length;
+  if(sign>0){ for(let k=0;k<n;k++) acc[k] += f[k]; }
+  else      { for(let k=0;k<n;k++) acc[k] -= f[k]; }
+}
+function extF(i){
+  const f = S.frames[i], acc = S.acc, n = acc.length;
+  if(S.mode==="lighten"){ for(let k=0;k<n;k++){ if(f[k]>acc[k]) acc[k]=f[k]; } }
+  else                  { for(let k=0;k<n;k++){ if(f[k]<acc[k]) acc[k]=f[k]; } }
+}
+function recompute(a,b){
+  S.acc.fill(S.mode==="darken" ? 255 : 0);
+  S.accA = a; S.accB = a - 1;
+  for(let i=a;i<=b;i++){ S.accB = i; additive() ? addF(i,1) : extF(i); }
+  if(b<a){ S.accA=-1; S.accB=-1; }
+}
+
+function setRange(a,b,force){
+  const N = S.frames.length;
+  if(!N){ S.accA=-1; S.a=0; S.b=-1; return; }
+  a = clamp(Math.round(a), 0, N-1);
+  b = clamp(Math.round(b), a, N-1);
+  S.a = a; S.b = b;
+  if(force || S.accA<0 || S.accB<S.accA){ recompute(a,b); return; }
+  if(additive()){
+    const steps = Math.abs(a-S.accA) + Math.abs(b-S.accB);
+    if(steps > (b-a+1)){ recompute(a,b); return; }
+    while(S.accA>a){ S.accA--; addF(S.accA,1); }
+    while(S.accA<a){ addF(S.accA,-1); S.accA++; }
+    while(S.accB<b){ S.accB++; addF(S.accB,1); }
+    while(S.accB>b){ addF(S.accB,-1); S.accB--; }
+  }else{
+    if(a===S.accA && b>=S.accB){ while(S.accB<b){ S.accB++; extF(S.accB); } }
+    else recompute(a,b);
+  }
+}
+
+function render(){
+  if(S.accA<0 || S.accB<S.accA){ out.classList.remove("on"); return; }
+  const n = S.accB - S.accA + 1, g = Math.pow(2,S.ev);
+  const k = S.mode==="mean" ? g/n : S.mode==="sum" ? g/16 : g;
+  const acc = S.acc, d = S.img.data, px = S.W*S.H;
+  for(let p=0,j=0,i=0; p<px; p++){
+    d[i++] = acc[j++]*k;
+    d[i++] = acc[j++]*k;
+    d[i++] = acc[j++]*k;
+    d[i++] = 255;
+  }
+  octx.putImageData(S.img,0,0);
+  out.classList.add("on");
+}
+
+/* ---------------- main loop ---------------- */
+let lastCap = 0, prevT = 0;
+function loop(t){
+  requestAnimationFrame(loop);
+  const dt = prevT ? Math.min((t-prevT)/1000, 0.25) : 0;
+  prevT = t;
+
+  if(S.recording && t - lastCap >= 1000/S.fps - 1){
+    lastCap = t;
+    grab();
+    const N = S.frames.length;
+    const b = N-1;
+    const a = S.lockWin ? Math.max(0, b - S.winLen + 1) : S.a;
+    setRange(a,b);
+    S.head = b;
+    render(); drawStrip(); updateUI();
+    if(N >= S.maxFrames){ stopRec("Buffer full — exposure ended."); }
+  }
+
+  if(S.play && !S.recording && S.frames.length){
+    S.head = clamp(S.head + S.play * S.fps * dt, 0, S.frames.length-1);
+    const b = Math.round(S.head);
+    const a = S.lockWin ? Math.max(0, b - S.winLen + 1) : S.a;
+    if(b !== S.b || a !== S.a){ setRange(a,b); render(); drawStrip(); updateUI(); }
+    if((S.play>0 && S.head>=S.frames.length-1) || (S.play<0 && S.head<=S.a)){
+      S.play = 0; updateUI();
+    }
+  }
+}
+requestAnimationFrame(loop);
+
+/* ---------------- density strip ---------------- */
+function drawStrip(){
+  const r = strip.getBoundingClientRect();
+  const dpr = Math.min(devicePixelRatio||1, 2);
+  const w = Math.max(1, Math.round(r.width*dpr)), h = Math.max(1, Math.round(r.height*dpr));
+  if(strip.width!==w || strip.height!==h){ strip.width=w; strip.height=h; }
+  sctx.clearRect(0,0,w,h);
+  const N = S.frames.length;
+  $("#trimEmpty").hidden = N>0;
+  if(!N){ $("#hA").hidden = $("#hB").hidden = $("#playhead").hidden = true; return; }
+
+  const cols = w;
+  const per = N/cols;
+  for(let x=0;x<cols;x++){
+    const i0 = Math.floor(x*per), i1 = Math.max(i0+1, Math.floor((x+1)*per));
+    let m = 0;
+    for(let i=i0;i<Math.min(i1,N);i++) if(S.lum[i]>m) m = S.lum[i];
+    const inR = i0 >= S.a && i0 <= S.b;
+    const v = Math.pow(m, 0.6);
+    // column tint: deep blue → paper, like density on a strip
+    const rr = Math.round(10 + v*222), gg = Math.round(31 + v*197), bb = Math.round(50 + v*167);
+    sctx.fillStyle = inR ? `rgb(${rr},${gg},${bb})` : `rgba(${rr},${gg},${bb},0.22)`;
+    sctx.fillRect(x,0,1,h);
+    const y = h - v*(h-4) - 2;
+    sctx.fillStyle = inR ? "#E8E4D9" : "rgba(232,228,217,0.25)";
+    sctx.fillRect(x, y, 1, 1.5*dpr);
+  }
+  const px = i => (N<=1 ? 0 : (i/(N-1))*r.width);
+  const hA = $("#hA"), hB = $("#hB"), ph = $("#playhead");
+  hA.hidden = hB.hidden = false;
+  hA.style.left = px(S.a) + "px";
+  hB.style.left = px(S.b) + "px";
+  ph.hidden = false;
+  ph.style.left = px(S.head) + "px";
+}
+addEventListener("resize", ()=>drawStrip());
+
+/* ---------------- trim interaction ---------------- */
+let drag = null, pending = null;
+const trim = $("#trim");
+function idxAt(clientX){
+  const r = trim.getBoundingClientRect();
+  const N = S.frames.length;
+  if(N<=1) return 0;
+  return clamp((clientX - r.left)/r.width, 0, 1) * (N-1);
+}
+trim.addEventListener("pointerdown", e=>{
+  if(!S.frames.length || S.recording) return;
+  trim.setPointerCapture(e.pointerId);
+  const i = idxAt(e.clientX);
+  const dA = Math.abs(i-S.a), dB = Math.abs(i-S.b);
+  const r = trim.getBoundingClientRect();
+  const grabPx = (S.frames.length-1) * (26/r.width);
+  if(dA<dB && dA<grabPx) drag = {h:"a"};
+  else if(dB<=dA && dB<grabPx) drag = {h:"b"};
+  else if(i>S.a && i<S.b) drag = {h:"both", off:i, a:S.a, b:S.b};
+  else drag = {h: i<S.a ? "a" : "b"};
+  S.play = 0;
+  onDrag(i);
+});
+trim.addEventListener("pointermove", e=>{ if(drag) onDrag(idxAt(e.clientX)); });
+["pointerup","pointercancel"].forEach(ev=>trim.addEventListener(ev, ()=>{ drag=null; }));
+
+function onDrag(i){
+  if(!drag) return;
+  if(drag.h==="a"){ S.a = clamp(Math.round(i), 0, S.b); }
+  else if(drag.h==="b"){ S.b = clamp(Math.round(i), S.a, S.frames.length-1); S.head = S.b; }
+  else{
+    const d = Math.round(i - drag.off);
+    const len = drag.b - drag.a;
+    let a = clamp(drag.a + d, 0, S.frames.length-1-len);
+    S.a = a; S.b = a + len; S.head = S.b;
+  }
+  pending = [S.a, S.b];
+  schedule();
+}
+let raf = 0;
+function schedule(){
+  if(raf) return;
+  raf = requestAnimationFrame(()=>{
+    raf = 0;
+    if(!pending) return;
+    const [a,b] = pending; pending = null;
+    setRange(a,b); render(); drawStrip(); updateUI();
+  });
+}
+
+/* ---------------- ui ---------------- */
+function updateUI(){
+  const N = S.frames.length;
+  const has = N>0;
+  $("#rFrames").textContent = has ? (S.a+1) + " – " + (S.b+1) + " of " + N : "0 – 0";
+  $("#rCount").textContent  = has ? (S.b-S.a+1) + "f · " + fmt(S.b-S.a+1) : "0";
+  $("#rBuf").textContent    = Math.round(N/S.maxFrames*100) + "%";
+  $("#tagTime").textContent = has ? fmt(S.b-S.a+1) : "0.0s";
+  ["#toStart","#rew","#play","#toEnd"].forEach(s=>$(s).disabled = !has || S.recording);
+  $("#play").setAttribute("aria-label", S.play>0 ? "Pause" : "Play the build");
+  $("#play").innerHTML = S.play>0
+    ? '<svg viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></svg>';
+  $("#rew").innerHTML = S.play<0
+    ? '<svg viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path d="M11 5v14l-9-7zM22 5v14l-9-7z"/></svg>';
+}
+
+/* record */
+function startRec(){
+  if(!S.stream) return;
+  if(S.frames.length >= S.maxFrames) clearFrames();
+  S.recording = true; S.play = 0; lastCap = 0;
+  if(!S.frames.length){ S.a = 0; S.b = -1; }
+  $("#recBtn").textContent = "Stop"; $("#recBtn").classList.add("stop");
+  $("#tagMode").classList.add("rec");
+  requestWake();
+  status("Exposing. Stop any time — you can trim it afterwards.");
+  updateUI();
+}
+function stopRec(msg){
+  S.recording = false;
+  $("#recBtn").textContent = "Record"; $("#recBtn").classList.remove("stop");
+  $("#tagMode").classList.remove("rec");
+  releaseWake();
+  S.head = S.b;
+  status(msg || "Exposure held. Drag the strip to trim, or play the build back.");
+  drawStrip(); updateUI();
+}
+$("#recBtn").onclick = ()=> S.recording ? stopRec() : startRec();
+$("#startCam").onclick = startCamera;
+
+$("#play").onclick = ()=>{
+  if(S.play>0){ S.play = 0; }
+  else { if(S.head >= S.frames.length-1) S.head = S.a; S.play = 1; }
+  updateUI();
+};
+$("#rew").onclick = ()=>{
+  if(S.play<0){ S.play = 0; }
+  else { if(S.head <= S.a) S.head = S.frames.length-1; S.play = -1; }
+  updateUI();
+};
+$("#toStart").onclick = ()=>{ S.play=0; S.head=S.a; setRange(S.a,S.a); render(); drawStrip(); updateUI(); };
+$("#toEnd").onclick   = ()=>{ S.play=0; const N=S.frames.length-1; S.head=N; setRange(S.a,N); render(); drawStrip(); updateUI(); };
+
+/* blend + exposure */
+$("#modeSeg").onclick = e=>{
+  const b = e.target.closest("button[data-mode]"); if(!b) return;
+  [...$("#modeSeg").children].forEach(x=>x.setAttribute("aria-pressed", String(x===b)));
+  S.mode = b.dataset.mode;
+  $("#tagMode").textContent = b.textContent;
+  if(S.frames.length){ setRange(S.a,S.b,true); render(); }
+};
+$("#ev").oninput = e=>{
+  S.ev = +e.target.value;
+  $("#evVal").textContent = (S.ev>0?"+":"") + S.ev.toFixed(2);
+  render();
+};
+$("#lockWin").onchange = e=>{
+  S.lockWin = e.target.checked;
+  if(S.lockWin && S.frames.length){
+    setRange(Math.max(0,S.b-S.winLen+1), S.b); render(); drawStrip(); updateUI();
+  }
+};
+$("#winLen").oninput = e=>{
+  S.winLen = +e.target.value;
+  $("#winVal").textContent = S.winLen + "f";
+  if(S.lockWin && S.frames.length){
+    setRange(Math.max(0,S.b-S.winLen+1), S.b); render(); drawStrip(); updateUI();
+  }
+};
+
+/* capture settings */
+$("#resSeg").onclick = e=>{
+  const b = e.target.closest("button[data-w]"); if(!b) return;
+  [...$("#resSeg").children].forEach(x=>x.setAttribute("aria-pressed", String(x===b)));
+  if(S.track){ setGeometry(); status("Detail changed — buffer cleared."); }
+};
+$("#fps").oninput = e=>{
+  S.fps = +e.target.value; $("#fpsVal").textContent = S.fps + "/s";
+  $("#capVal").textContent = Math.round(S.maxFrames/S.fps) + "s";
+  updateUI();
+};
+$("#cap").oninput = e=>{
+  S.maxFrames = +e.target.value;
+  $("#capVal").textContent = Math.round(S.maxFrames/S.fps) + "s";
+  if(S.frames.length > S.maxFrames){ clearFrames(); status("Length reduced — buffer cleared."); }
+  updateUI();
+};
+$("#camSel").onchange = e=>{ if(S.recording) stopRec(); S.devId = e.target.value; startCamera(); };
+$("#mirror").onchange = e=>{ $("#stage").classList.toggle("mirror", e.target.checked); };
+$("#torch").onchange = async e=>{
+  try{ await S.track.applyConstraints({advanced:[{torch:e.target.checked}]}); }
+  catch(err){ status("Torch not available on this camera."); e.target.checked=false; }
+};
+$("#clear").onclick = ()=>{ if(S.recording) stopRec(); clearFrames(); status("Cleared."); };
+
+/* wake lock */
+async function requestWake(){
+  try{ if("wakeLock" in navigator) S.wake = await navigator.wakeLock.request("screen"); }catch(e){}
+}
+function releaseWake(){ try{ S.wake && S.wake.release(); }catch(e){} S.wake = null; }
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState==="visible" && S.recording) requestWake();
+});
+
+/* ---------------- export ---------------- */
+function stamp(){
+  const d = new Date(), p = n=>String(n).padStart(2,"0");
+  return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds());
+}
+$("#savePng").onclick = ()=>{
+  if(S.accA<0){ status("Record something first."); return; }
+  out.toBlob(b=>{
+    const u = URL.createObjectURL(b), a = document.createElement("a");
+    a.href = u; a.download = "accumulator-" + stamp() + ".png"; a.click();
+    setTimeout(()=>URL.revokeObjectURL(u), 4000);
+    status("Image saved.");
+  }, "image/png");
+};
+
+function pickMime(){
+  if(typeof MediaRecorder === "undefined") return null;
+  return ["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm","video/mp4"]
+    .find(m=>MediaRecorder.isTypeSupported(m)) || null;
+}
+$("#saveVid").onclick = async ()=>{
+  if(!S.frames.length){ status("Record something first."); return; }
+  if(S.exporting) return;
+  const mime = pickMime();
+  if(!mime){ status("This browser cannot export video. Save an image instead."); return; }
+  S.exporting = true; S.play = 0;
+  const a = S.a, bEnd = S.b;
+  const stream = out.captureStream(0);
+  const vtrack = stream.getVideoTracks()[0];
+  const rec = new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond: 8e6});
+  const chunks = [];
+  rec.ondataavailable = e=>{ if(e.data.size) chunks.push(e.data); };
+  rec.onstop = ()=>{
+    const blob = new Blob(chunks, {type:mime});
+    const u = URL.createObjectURL(blob), el = document.createElement("a");
+    el.href = u; el.download = "accumulator-" + stamp() + (mime.includes("mp4")?".mp4":".webm"); el.click();
+    setTimeout(()=>URL.revokeObjectURL(u), 6000);
+    S.exporting = false;
+    status("Build exported.");
+    setRange(a,bEnd); render(); drawStrip(); updateUI();
+  };
+  rec.start();
+  const step = 1000/S.fps;
+  for(let i=a;i<=bEnd;i++){
+    const from = S.lockWin ? Math.max(a, i-S.winLen+1) : a;
+    setRange(from,i); render();
+    if(vtrack.requestFrame) vtrack.requestFrame();
+    S.head = i; drawStrip();
+    status("Exporting " + Math.round((i-a)/(bEnd-a||1)*100) + "%");
+    await new Promise(r=>setTimeout(r, step));
+  }
+  rec.stop();
+};
+
+/* install */
+let installEvt = null;
+addEventListener("beforeinstallprompt", e=>{
+  e.preventDefault(); installEvt = e; $("#installRow").hidden = false;
+});
+$("#install").onclick = async ()=>{
+  if(!installEvt) return;
+  installEvt.prompt(); await installEvt.userChoice;
+  installEvt = null; $("#installRow").hidden = true;
+};
+
+/* boot */
+$("#capVal").textContent = Math.round(S.maxFrames/S.fps) + "s";
+$("#cap").value = S.maxFrames;
+updateUI(); drawStrip();
+if("serviceWorker" in navigator){
+  addEventListener("load", ()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>
