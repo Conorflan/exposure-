@@ -24,20 +24,29 @@ icon-maskable-512.png
 
 ## How it works
 
-Frames are captured into a fixed-length buffer at the chosen rate. The composite is the accumulation of frames between the two handles on the density strip. Moving a handle adds or subtracts individual frames from the running accumulator rather than recomputing from scratch, so scrubbing stays responsive even on long clips.
+Frames are captured into a fixed-length buffer at the chosen rate. The composite is the accumulation of frames between the two handles on the strip. Moving a handle adds or subtracts individual frames from a running accumulator rather than recomputing from scratch, so scrubbing stays responsive on long clips.
 
-**Blend modes**
+The strip shows thumbnails of the clip along the top and a frame-to-frame change trace along the bottom, auto-scaled to the busiest moment. Peaks are where something moved or a light passed through.
 
-- **Mean** — averages the range. Motion smears, static parts stay sharp. Long enough, and moving people disappear.
-- **Sum** — adds the range. Light builds on light; anything dark contributes nothing. Light painting.
-- **Lighten** — keeps the brightest value each pixel ever reached. Traffic trails, sparklers, star trails.
-- **Darken** — keeps the darkest. The inverse; good for pulling silhouettes out of a moving bright field.
+## The exposure model
 
-Exposure is in stops and applies after accumulation, so you can push Sum hard without re-recording.
+Accumulation happens in **linear light**. Each frame is converted out of sRGB before being added, and the result is encoded back on the way to the screen. This is what a sensor actually does, and it is the difference between highlights that bloom and highlights that go muddy. Turn it off to accumulate in gamma space if you want the flatter, more digital look.
 
-**Trail the last** anchors the start handle a fixed number of frames behind the end, giving a rolling window instead of a growing one. During recording that reads as a decaying trail; on playback it moves both handles together.
+**Normalize** controls the divisor: the accumulated total is divided by `n^p`, where `n` is the frame count and `p` is the slider.
 
-**Rewinding** is just the end handle moving backwards — press rewind, or drag the handle. Mean and Sum unwind frame by frame. Lighten and Darken can't be un-maxed, so shrinking the range recomputes that span; it's still fast, just doing more work.
+- `1.00` (Average) — brightness stays constant however long you expose. Silky water, ghosted people, the classic ND-filter look.
+- `0.00` (Sum) — nothing is divided out. Light genuinely builds up, and a long enough exposure blows out, exactly like leaving the shutter open. For light painting.
+- Between — partial normalization. Around `0.5` the image brightens with time but slowly enough to stay usable, which is usually the sweet spot for anything longer than a few seconds.
+
+**Exposure** is a clean gain in stops, applied after accumulation. Nothing is baked in at capture, so you can rebalance any take at any time. **Fit** picks the exposure that puts the brightest half-percent of pixels just under white.
+
+**Soft highlights** replaces the hard clip at white with a shoulder that rolls off toward it. Accumulations bloom instead of flattening into solid white patches. It only affects the top of the range.
+
+**Lighten** and **Darken** are not exposure physics — they keep the brightest or darkest value each pixel ever reached. Lighten is the right tool for traffic trails and star trails, where you want the trails to build without the sky building with them. Darken pulls silhouettes out of a moving bright field.
+
+**Trail the last** anchors the start handle a fixed number of frames behind the end, giving a rolling window instead of a growing one — a decaying trail rather than a total.
+
+**Rewinding** is just the end handle moving backwards. Expose unwinds frame by frame. Lighten and Darken cannot be un-maxed, so shrinking the range recomputes that span.
 
 ## Notes on limits
 

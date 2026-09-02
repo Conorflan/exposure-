@@ -14,16 +14,9 @@
 <link rel="icon" href="./icon-192.png">
 <style>
 :root{
-  --ink:#0A1622;
-  --ink2:#0F1F2E;
-  --ink3:#152B3E;
-  --line:#1E3A52;
-  --blue:#3C6E97;
-  --sky:#8FBEDC;
-  --paper:#E8E4D9;
-  --dim:#6E8CA4;
+  --ink:#0A1622; --ink2:#0F1F2E; --line:#1E3A52;
+  --blue:#3C6E97; --sky:#8FBEDC; --paper:#E8E4D9; --dim:#6E8CA4;
   --rust:#C05A34;
-  --rust-lo:#7A3620;
   --pad:14px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -40,22 +33,17 @@ button,select,input{font:inherit;color:inherit;font-variant-numeric:tabular-nums
 button{background:none;border:0;padding:0;cursor:pointer}
 :focus-visible{outline:2px solid var(--sky);outline-offset:2px}
 
-/* ---------- viewfinder ---------- */
-#stage{
-  position:relative;flex:1 1 auto;min-height:28vh;background:#050C13;
-  display:flex;align-items:center;justify-content:center;overflow:hidden;
-}
-#frame{position:relative;max-width:100%;max-height:100%;aspect-ratio:3/4;background:#050C13}
-#video,#out{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
-#out{opacity:0;transition:opacity .18s linear;image-rendering:auto}
+/* viewfinder — video is the sizer, canvas sits exactly over it */
+#stage{position:relative;flex:1 1 auto;min-height:30vh;background:#050C13;overflow:hidden}
+#video,#out{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
+#out{opacity:0;transition:opacity .18s linear}
 #out.on{opacity:1}
 #stage.mirror #video,#stage.mirror #out{transform:scaleX(-1)}
 
 #hud{position:absolute;left:0;right:0;top:0;padding:10px 12px;display:flex;gap:10px;
   align-items:flex-start;justify-content:space-between;pointer-events:none;
   background:linear-gradient(#050C13cc,#050C1300)}
-.tag{font-size:12px;letter-spacing:.02em;color:var(--sky);background:#050C1399;
-  padding:3px 7px;border:1px solid var(--line)}
+.tag{font-size:12px;color:var(--sky);background:#050C1399;padding:3px 7px;border:1px solid var(--line)}
 .tag.rec{color:var(--paper);background:var(--rust);border-color:var(--rust)}
 .tag.rec::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;
   background:var(--paper);margin-right:6px;vertical-align:1px;animation:pulse 1.4s infinite}
@@ -68,7 +56,7 @@ button{background:none;border:0;padding:0;cursor:pointer}
 #gate p{margin:0;max-width:34ch;color:var(--dim);font-size:14px}
 #gate.hide{display:none}
 
-/* ---------- density strip / trim ---------- */
+/* timeline */
 #trim{position:relative;height:92px;background:var(--ink2);border-top:1px solid var(--line);
   border-bottom:1px solid var(--line);touch-action:none;user-select:none;overflow:hidden}
 #strip{position:absolute;inset:0;width:100%;height:100%;display:block}
@@ -77,35 +65,34 @@ button{background:none;border:0;padding:0;cursor:pointer}
 .handle.b::after{top:auto;bottom:0}
 #playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--paper);opacity:.55;pointer-events:none}
 #trimEmpty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  color:var(--dim);font-size:13px;pointer-events:none}
+  color:var(--dim);font-size:13px;pointer-events:none;text-align:center;padding:0 20px}
 
-/* ---------- readout ---------- */
 #readout{display:flex;gap:16px;padding:8px var(--pad);font-size:12.5px;color:var(--dim);
   border-bottom:1px solid var(--line);flex-wrap:wrap}
 #readout b{font-weight:600;color:var(--paper)}
 
-/* ---------- transport ---------- */
 #transport{display:flex;align-items:center;gap:6px;padding:10px var(--pad);
   border-bottom:1px solid var(--line)}
 .tbtn{flex:1;height:46px;border:1px solid var(--line);background:var(--ink2);color:var(--paper);
   display:flex;align-items:center;justify-content:center}
 .tbtn:disabled{opacity:.3}
 .tbtn svg{width:20px;height:20px;fill:currentColor}
-#recBtn{flex:1.6;background:var(--rust);border-color:var(--rust);font-weight:600;font-size:14px;gap:8px}
+#recBtn{flex:1.6;background:var(--rust);border-color:var(--rust);font-weight:600;font-size:14px}
 #recBtn.stop{background:var(--ink2);border-color:var(--rust);color:var(--rust)}
 
-/* ---------- panel ---------- */
-#panel{flex:1 1 auto;overflow-y:auto;max-height:36vh;padding:0 var(--pad) 18px}
+#panel{flex:1 1 auto;overflow-y:auto;max-height:38vh;padding:0 var(--pad) 18px}
 .row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .row:last-child{border-bottom:0}
+.row.off{opacity:.4;pointer-events:none}
 .row .lbl{flex:0 0 72px;color:var(--dim);font-size:13px}
 .seg{display:flex;flex:1;border:1px solid var(--line)}
 .seg button{flex:1;padding:9px 2px;font-size:12.5px;color:var(--dim);background:var(--ink2);
   border-right:1px solid var(--line)}
 .seg button:last-child{border-right:0}
 .seg button[aria-pressed=true]{background:var(--blue);color:var(--paper)}
-input[type=range]{flex:1;accent-color:var(--sky);background:none;min-width:0}
-.val{flex:0 0 58px;text-align:right;font-size:13px}
+input[type=range]{flex:1 1 110px;accent-color:var(--sky);background:none;min-width:0}
+.val{flex:0 0 66px;text-align:right;font-size:12.5px;color:var(--sky)}
+.mini{flex:0 0 auto;padding:7px 11px;border:1px solid var(--line);background:var(--ink2);font-size:12.5px;color:var(--sky)}
 select{flex:1;min-width:0;background:var(--ink2);border:1px solid var(--line);padding:9px 8px}
 .abtn{padding:10px 12px;border:1px solid var(--line);background:var(--ink2);font-size:13.5px;flex:1}
 .abtn.ghost{color:var(--sky)}
@@ -115,20 +102,18 @@ summary::-webkit-details-marker{display:none}
 summary::before{content:"+ ";color:var(--dim)}
 details[open] summary::before{content:"– "}
 #status{padding:10px var(--pad) 0;font-size:12.5px;color:var(--dim);min-height:1.4em}
-.sw{display:flex;align-items:center;gap:8px}
+.sw{display:flex;align-items:center;gap:8px;font-size:13px;flex:1 1 auto}
 input[type=checkbox]{width:18px;height:18px;accent-color:var(--rust)}
 </style>
 </head>
 <body>
 
 <div id="stage">
-  <div id="frame">
-    <video id="video" playsinline autoplay muted></video>
-    <canvas id="out"></canvas>
-    <div id="hud">
-      <span class="tag" id="tagMode">Mean</span>
-      <span class="tag" id="tagTime">0.0s</span>
-    </div>
+  <video id="video" playsinline autoplay muted></video>
+  <canvas id="out"></canvas>
+  <div id="hud">
+    <span class="tag" id="tagMode">Expose</span>
+    <span class="tag" id="tagTime">0.0s</span>
   </div>
   <div id="gate">
     <h1>Accumulator</h1>
@@ -167,23 +152,31 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--rust)}
   <div class="row">
     <span class="lbl">Blend</span>
     <div class="seg" id="modeSeg">
-      <button data-mode="mean" aria-pressed="true">Mean</button>
-      <button data-mode="sum" aria-pressed="false">Sum</button>
+      <button data-mode="expose" aria-pressed="true">Expose</button>
       <button data-mode="lighten" aria-pressed="false">Lighten</button>
       <button data-mode="darken" aria-pressed="false">Darken</button>
     </div>
   </div>
+  <div class="row" id="normRow">
+    <span class="lbl">Normalize</span>
+    <input type="range" id="norm" min="0" max="1" step="0.01" value="1">
+    <span class="val" id="normVal">Average</span>
+  </div>
   <div class="row">
     <span class="lbl">Exposure</span>
-    <input type="range" id="ev" min="-4" max="4" step="0.05" value="0">
+    <input type="range" id="ev" min="-6" max="6" step="0.05" value="0">
     <span class="val" id="evVal">0.00</span>
+    <button class="mini" id="fit">Fit</button>
+  </div>
+  <div class="row">
+    <span class="lbl">Response</span>
+    <label class="sw"><input type="checkbox" id="linear" checked> Linear light</label>
+    <label class="sw"><input type="checkbox" id="soft" checked> Soft highlights</label>
   </div>
   <div class="row">
     <span class="lbl">Window</span>
-    <label class="sw" style="flex:1;font-size:13.5px">
-      <input type="checkbox" id="lockWin"> Trail the last
-    </label>
-    <input type="range" id="winLen" min="2" max="240" step="1" value="48" style="flex:1 1 130px">
+    <label class="sw"><input type="checkbox" id="lockWin"> Trail the last</label>
+    <input type="range" id="winLen" min="2" max="240" step="1" value="48">
     <span class="val" id="winVal">48f</span>
   </div>
   <div class="row">
@@ -219,12 +212,8 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--rust)}
     </div>
     <div class="row">
       <span class="lbl">Light</span>
-      <label class="sw" style="flex:1;font-size:13.5px">
-        <input type="checkbox" id="torch"> Torch
-      </label>
-      <label class="sw" style="flex:1;font-size:13.5px">
-        <input type="checkbox" id="mirror"> Mirror
-      </label>
+      <label class="sw"><input type="checkbox" id="torch"> Torch</label>
+      <label class="sw"><input type="checkbox" id="mirror"> Mirror</label>
     </div>
     <div class="row" id="installRow" hidden>
       <button class="abtn ghost" id="install">Add to home screen</button>
@@ -248,22 +237,45 @@ const tcan  = document.createElement("canvas");
 const tctx  = tcan.getContext("2d",{willReadFrequently:true});
 const strip = $("#strip");
 const sctx  = strip.getContext("2d");
+const trim  = $("#trim");
+
+const UNIT = 65535;          // per-frame fixed-point scale
+const OUTN = 8192;           // output LUT resolution
+const OUTS = 1024;           // LUT index per 1.0 of nominal white
 
 const S = {
   stream:null, track:null, devices:[], devId:null, facing:"environment",
-  W:0, H:0, aspect:3/4,
-  frames:[], lum:[], mot:[], thumbs:[], tw:96, th:72, maxFrames:360, fps:12,
+  W:0, H:0, aspect:16/9, tw:112, th:64,
+  frames:[], mot:[], thumbs:[], maxFrames:360, fps:12,
   acc:null, img:null, accA:-1, accB:-1,
   a:0, b:-1,
-  mode:"mean", ev:0,
+  mode:"expose", ev:0, norm:1, linear:true, soft:true,
   recording:false, lockWin:false, winLen:48,
-  play:0, head:0,
-  wake:null, exporting:false
+  play:0, head:0, wake:null, exporting:false
 };
 
+const LIN = new Float64Array(256);   // 8-bit input -> accumulation units
+const OUT = new Uint8ClampedArray(OUTN);
+
+function s2l(c){ c/=255; return c<=0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+function l2s(v){ return v<=0.0031308 ? v*12.92 : 1.055*Math.pow(v,1/2.4)-0.055; }
+
+function buildIn(){
+  for(let i=0;i<256;i++) LIN[i] = Math.round((S.linear ? s2l(i) : i/255) * UNIT);
+}
+function buildOut(){
+  const knee = 0.65;
+  for(let i=0;i<OUTN;i++){
+    let x = i/OUTS;
+    if(S.soft && x>knee) x = knee + (1-knee)*(1-Math.exp(-(x-knee)/(1-knee)));
+    x = clamp(x,0,1);
+    OUT[i] = Math.round((S.linear ? l2s(x) : x) * 255);
+  }
+}
+buildIn(); buildOut();
+
 function status(t){ $("#status").textContent = t; }
-const secs = n => (n / S.fps);
-const fmt  = n => secs(n).toFixed(1) + "s";
+const fmt = n => (n/S.fps).toFixed(1) + "s";
 
 /* ---------------- camera ---------------- */
 async function startCamera(){
@@ -276,14 +288,14 @@ async function startCamera(){
     video.srcObject = S.stream;
     await video.play();
     S.track = S.stream.getVideoTracks()[0];
+    $("#torch").checked = false;
     if(!video.videoWidth){
       await new Promise(r=>{
         const done=()=>{ video.removeEventListener("loadedmetadata",done); r(); };
-        video.addEventListener("loadedmetadata",done); setTimeout(done,1500);
+        video.addEventListener("loadedmetadata",done); setTimeout(done,2000);
       });
     }
     S.devId = S.track.getSettings().deviceId || S.devId;
-    $("#torch").checked = false;
     $("#gate").classList.add("hide");
     $("#recBtn").disabled = false;
     await listDevices();
@@ -319,7 +331,6 @@ function setGeometry(){
   const vw = video.videoWidth || st.width || 1280;
   const vh = video.videoHeight || st.height || 720;
   S.aspect = vw/vh;
-  $("#frame").style.aspectRatio = vw + "/" + vh;
   const target = +document.querySelector("#resSeg [aria-pressed=true]").dataset.w;
   const W = Math.min(target, vw);
   const H = Math.max(2, Math.round(W/S.aspect/2)*2);
@@ -328,7 +339,7 @@ function setGeometry(){
   if(W !== S.W || H !== S.H){
     S.W = W; S.H = H;
     cap.width = out.width = W; cap.height = out.height = H;
-    S.acc = new Float32Array(W*H*3);
+    S.acc = new Float64Array(W*H*3);
     S.img = octx.createImageData(W,H);
     clearFrames();
   }
@@ -336,7 +347,7 @@ function setGeometry(){
 
 /* ---------------- buffer ---------------- */
 function clearFrames(){
-  S.frames.length = 0; S.lum.length = 0; S.mot.length = 0; S.thumbs.length = 0;
+  S.frames.length = 0; S.mot.length = 0; S.thumbs.length = 0;
   S.accA = S.accB = -1; S.a = 0; S.b = -1; S.head = 0; S.play = 0;
   out.classList.remove("on");
   drawStrip(); updateUI();
@@ -348,18 +359,16 @@ function grab(){
   const d = cctx.getImageData(0,0,W,H).data;
   const f = new Uint8ClampedArray(W*H*3);
   const prev = S.frames.length ? S.frames[S.frames.length-1] : null;
-  let sum = 0, mot = 0, mn = 0;
+  let mot = 0, mn = 0;
   for(let i=0,j=0; i<d.length; i+=4, j+=3){
     const r=d[i], g=d[i+1], b=d[i+2];
     f[j]=r; f[j+1]=g; f[j+2]=b;
-    sum += (r*77 + g*150 + b*29) >> 8;
     if(prev && (j % 12) === 0){
       mot += Math.abs(r-prev[j]) + Math.abs(g-prev[j+1]) + Math.abs(b-prev[j+2]);
       mn++;
     }
   }
   S.frames.push(f);
-  S.lum.push(sum/(W*H)/255);
   S.mot.push(mn ? mot/(mn*765) : 0);
   if(S.mot.length === 2) S.mot[0] = S.mot[1];
   tctx.drawImage(cap, 0, 0, S.tw, S.th);
@@ -367,25 +376,24 @@ function grab(){
 }
 
 /* ---------------- accumulation ---------------- */
-const additive = () => S.mode==="mean" || S.mode==="sum";
+const additive = () => S.mode === "expose";
 
 function addF(i,sign){
   const f = S.frames[i], acc = S.acc, n = acc.length;
-  if(sign>0){ for(let k=0;k<n;k++) acc[k] += f[k]; }
-  else      { for(let k=0;k<n;k++) acc[k] -= f[k]; }
+  if(sign>0){ for(let k=0;k<n;k++) acc[k] += LIN[f[k]]; }
+  else      { for(let k=0;k<n;k++) acc[k] -= LIN[f[k]]; }
 }
 function extF(i){
   const f = S.frames[i], acc = S.acc, n = acc.length;
-  if(S.mode==="lighten"){ for(let k=0;k<n;k++){ if(f[k]>acc[k]) acc[k]=f[k]; } }
-  else                  { for(let k=0;k<n;k++){ if(f[k]<acc[k]) acc[k]=f[k]; } }
+  if(S.mode==="lighten"){ for(let k=0;k<n;k++){ const v=LIN[f[k]]; if(v>acc[k]) acc[k]=v; } }
+  else                  { for(let k=0;k<n;k++){ const v=LIN[f[k]]; if(v<acc[k]) acc[k]=v; } }
 }
 function recompute(a,b){
-  S.acc.fill(S.mode==="darken" ? 255 : 0);
+  S.acc.fill(S.mode==="darken" ? UNIT : 0);
   S.accA = a; S.accB = a - 1;
   for(let i=a;i<=b;i++){ S.accB = i; additive() ? addF(i,1) : extF(i); }
-  if(b<a){ S.accA=-1; S.accB=-1; }
+  if(b<a){ S.accA = -1; S.accB = -1; }
 }
-
 function setRange(a,b,force){
   const N = S.frames.length;
   if(!N){ S.accA=-1; S.a=0; S.b=-1; return; }
@@ -406,19 +414,42 @@ function setRange(a,b,force){
   }
 }
 
+/* nominal white = 1.0; returns the accumulator scale that maps to LUT index */
+function gain(){
+  const n = Math.max(1, S.accB - S.accA + 1);
+  const denom = additive() ? Math.pow(n, S.norm) : 1;
+  return Math.pow(2, S.ev) / (UNIT * denom);
+}
+
 function render(){
   if(S.accA<0 || S.accB<S.accA){ out.classList.remove("on"); return; }
-  const n = S.accB - S.accA + 1, g = Math.pow(2,S.ev);
-  const k = S.mode==="mean" ? g/n : S.mode==="sum" ? g/16 : g;
-  const acc = S.acc, d = S.img.data, px = S.W*S.H;
+  const kk = gain() * OUTS;
+  const acc = S.acc, d = S.img.data, px = S.W*S.H, LAST = OUTN-1;
   for(let p=0,j=0,i=0; p<px; p++){
-    d[i++] = acc[j++]*k;
-    d[i++] = acc[j++]*k;
-    d[i++] = acc[j++]*k;
+    let x = acc[j++]*kk; d[i++] = OUT[x>LAST?LAST:x>0?x|0:0];
+    x = acc[j++]*kk;     d[i++] = OUT[x>LAST?LAST:x>0?x|0:0];
+    x = acc[j++]*kk;     d[i++] = OUT[x>LAST?LAST:x>0?x|0:0];
     d[i++] = 255;
   }
   octx.putImageData(S.img,0,0);
   out.classList.add("on");
+}
+
+/* pick the exposure that puts the brightest 0.5% just under white */
+function fitExposure(){
+  if(S.accA<0){ status("Record something first."); return; }
+  const acc = S.acc, n = acc.length, samp = [];
+  const stride = Math.max(3, (Math.floor(n/24000)*3) || 3);
+  for(let k=0;k<n;k+=stride) samp.push(acc[k]);
+  if(!samp.length) return;
+  samp.sort((x,y)=>x-y);
+  const p = samp[Math.min(samp.length-1, Math.floor(samp.length*0.995))];
+  if(p<=0){ status("Nothing bright enough to fit to."); return; }
+  const denom = additive() ? Math.pow(Math.max(1,S.accB-S.accA+1), S.norm) : 1;
+  const ev = clamp(Math.log2(0.92 * UNIT * denom / p), -6, 6);
+  S.ev = ev; $("#ev").value = ev; $("#evVal").textContent = (ev>0?"+":"") + ev.toFixed(2);
+  render();
+  status("Exposure fitted to " + (ev>0?"+":"") + ev.toFixed(2) + " stops.");
 }
 
 /* ---------------- main loop ---------------- */
@@ -431,13 +462,12 @@ function loop(t){
   if(S.recording && t - lastCap >= 1000/S.fps - 1){
     lastCap = t;
     grab();
-    const N = S.frames.length;
-    const b = N-1;
+    const b = S.frames.length - 1;
     const a = S.lockWin ? Math.max(0, b - S.winLen + 1) : S.a;
     setRange(a,b);
     S.head = b;
     render(); drawStrip(); updateUI();
-    if(N >= S.maxFrames){ stopRec("Buffer full — exposure ended."); }
+    if(S.frames.length >= S.maxFrames) stopRec("Buffer full — exposure ended.");
   }
 
   if(S.play && !S.recording && S.frames.length){
@@ -445,14 +475,12 @@ function loop(t){
     const b = Math.round(S.head);
     const a = S.lockWin ? Math.max(0, b - S.winLen + 1) : S.a;
     if(b !== S.b || a !== S.a){ setRange(a,b); render(); drawStrip(); updateUI(); }
-    if((S.play>0 && S.head>=S.frames.length-1) || (S.play<0 && S.head<=S.a)){
-      S.play = 0; updateUI();
-    }
+    if((S.play>0 && S.head>=S.frames.length-1) || (S.play<0 && S.head<=S.a)){ S.play=0; updateUI(); }
   }
 }
 requestAnimationFrame(loop);
 
-/* ---------------- density strip ---------------- */
+/* ---------------- timeline ---------------- */
 function drawStrip(){
   const r = trim.getBoundingClientRect();
   const dpr = Math.min(devicePixelRatio||1, 2);
@@ -465,18 +493,16 @@ function drawStrip(){
   const N = S.frames.length;
   $("#trimEmpty").hidden = N>0;
   const hA=$("#hA"), hB=$("#hB"), ph=$("#playhead");
-  if(!N){ hA.hidden = hB.hidden = ph.hidden = true; return; }
+  if(!N || !W){ hA.hidden = hB.hidden = ph.hidden = true; return; }
 
   const filmH = Math.round(H*0.64), traceH = H - filmH;
 
-  // --- filmstrip: real thumbnails, one per slot across the clip ---
   const tw = Math.max(30, Math.round(filmH * (S.tw/S.th)));
   const slots = Math.max(1, Math.ceil(W/tw));
   sctx.save();
   sctx.beginPath(); sctx.rect(0,0,W,filmH); sctx.clip();
   for(let c=0;c<slots;c++){
-    const f = slots===1 ? 0 : ((c+0.5)*tw)/W;
-    const i = Math.min(N-1, Math.max(0, Math.round(f*(N-1))));
+    const i = Math.min(N-1, Math.max(0, Math.round((((c+0.5)*tw)/W)*(N-1))));
     const th = S.thumbs[i];
     if(!th) continue;
     tctx.putImageData(th,0,0);
@@ -486,26 +512,20 @@ function drawStrip(){
   sctx.fillStyle = "rgba(30,58,82,0.55)";
   for(let c=1;c<slots;c++) sctx.fillRect(c*tw, 0, 1, filmH);
 
-  // --- activity trace: frame-to-frame change, auto-scaled to the clip ---
   sctx.fillStyle = "#0A1622";
   sctx.fillRect(0, filmH, W, traceH);
   let peak = 0;
   for(let i=0;i<N;i++) if(S.mot[i]>peak) peak = S.mot[i];
   if(peak < 0.004) peak = 0.004;
   const base = H - 1;
-  sctx.beginPath();
-  sctx.moveTo(0, base);
+  sctx.beginPath(); sctx.moveTo(0, base);
   for(let x=0;x<=W;x++){
     const i = Math.min(N-1, Math.floor((x/W)*N));
-    const v = Math.min(1, S.mot[i]/peak);
-    sctx.lineTo(x, base - v*(traceH-3));
+    sctx.lineTo(x, base - Math.min(1, S.mot[i]/peak)*(traceH-3));
   }
-  sctx.lineTo(W, base);
-  sctx.closePath();
-  sctx.fillStyle = "#3C6E97";
-  sctx.fill();
+  sctx.lineTo(W, base); sctx.closePath();
+  sctx.fillStyle = "#3C6E97"; sctx.fill();
 
-  // --- range: everything outside the exposure is held back ---
   const xa = (S.a/N)*W, xb = ((S.b+1)/N)*W;
   sctx.fillStyle = "rgba(10,22,34,0.76)";
   sctx.fillRect(0,0,xa,H);
@@ -521,9 +541,7 @@ function drawStrip(){
 }
 addEventListener("resize", ()=>drawStrip());
 
-/* ---------------- trim interaction ---------------- */
-let drag = null, pending = null;
-const trim = $("#trim");
+let drag = null, pending = null, raf = 0;
 function localX(clientX){
   const r = trim.getBoundingClientRect();
   return clamp(clientX - r.left, 0, r.width);
@@ -555,16 +573,11 @@ function onDrag(x){
   if(drag.h==="a"){ S.a = clamp(i, 0, S.b); }
   else if(drag.h==="b"){ S.b = clamp(i, S.a, S.frames.length-1); S.head = S.b; }
   else{
-    const d = i - drag.off;
     const len = drag.b - drag.a;
-    let a = clamp(drag.a + d, 0, S.frames.length-1-len);
+    const a = clamp(drag.a + (i - drag.off), 0, S.frames.length-1-len);
     S.a = a; S.b = a + len; S.head = S.b;
   }
   pending = [S.a, S.b];
-  schedule();
-}
-let raf = 0;
-function schedule(){
   if(raf) return;
   raf = requestAnimationFrame(()=>{
     raf = 0;
@@ -576,14 +589,13 @@ function schedule(){
 
 /* ---------------- ui ---------------- */
 function updateUI(){
-  const N = S.frames.length;
-  const has = N>0;
+  const N = S.frames.length, has = N>0;
   $("#rFrames").textContent = has ? (S.a+1) + " – " + (S.b+1) + " of " + N : "0 – 0";
   $("#rCount").textContent  = has ? (S.b-S.a+1) + "f · " + fmt(S.b-S.a+1) : "0";
   $("#rBuf").textContent    = Math.round(N/S.maxFrames*100) + "%";
   $("#tagTime").textContent = has ? fmt(S.b-S.a+1) : "0.0s";
   ["#toStart","#rew","#play","#toEnd"].forEach(s=>$(s).disabled = !has || S.recording);
-  $("#play").setAttribute("aria-label", S.play>0 ? "Pause" : "Play the build");
+  $("#normRow").classList.toggle("off", !additive());
   $("#play").innerHTML = S.play>0
     ? '<svg viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'
     : '<svg viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></svg>';
@@ -592,7 +604,6 @@ function updateUI(){
     : '<svg viewBox="0 0 24 24"><path d="M11 5v14l-9-7zM22 5v14l-9-7z"/></svg>';
 }
 
-/* record */
 function startRec(){
   if(!S.stream) return;
   if(S.frames.length >= S.maxFrames) clearFrames();
@@ -601,7 +612,7 @@ function startRec(){
   $("#recBtn").textContent = "Stop"; $("#recBtn").classList.add("stop");
   $("#tagMode").classList.add("rec");
   requestWake();
-  status("Exposing. Stop any time — you can trim it afterwards.");
+  status("Exposing. Stop any time — everything is adjustable afterwards.");
   updateUI();
 }
 function stopRec(msg){
@@ -610,53 +621,60 @@ function stopRec(msg){
   $("#tagMode").classList.remove("rec");
   releaseWake();
   S.head = S.b;
-  status(msg || "Exposure held. Drag the strip to trim, or play the build back.");
+  status(msg || "Exposure held. Trim it on the strip, or press Fit to balance the brightness.");
   drawStrip(); updateUI();
 }
 $("#recBtn").onclick = ()=> S.recording ? stopRec() : startRec();
 $("#startCam").onclick = startCamera;
 
 $("#play").onclick = ()=>{
-  if(S.play>0){ S.play = 0; }
+  if(S.play>0) S.play = 0;
   else { if(S.head >= S.frames.length-1) S.head = S.a; S.play = 1; }
   updateUI();
 };
 $("#rew").onclick = ()=>{
-  if(S.play<0){ S.play = 0; }
+  if(S.play<0) S.play = 0;
   else { if(S.head <= S.a) S.head = S.frames.length-1; S.play = -1; }
   updateUI();
 };
 $("#toStart").onclick = ()=>{ S.play=0; S.head=S.a; setRange(S.a,S.a); render(); drawStrip(); updateUI(); };
 $("#toEnd").onclick   = ()=>{ S.play=0; const N=S.frames.length-1; S.head=N; setRange(S.a,N); render(); drawStrip(); updateUI(); };
 
-/* blend + exposure */
 $("#modeSeg").onclick = e=>{
   const b = e.target.closest("button[data-mode]"); if(!b) return;
   [...$("#modeSeg").children].forEach(x=>x.setAttribute("aria-pressed", String(x===b)));
   S.mode = b.dataset.mode;
   $("#tagMode").textContent = b.textContent;
   if(S.frames.length){ setRange(S.a,S.b,true); render(); }
+  updateUI();
+};
+$("#norm").oninput = e=>{
+  S.norm = +e.target.value;
+  $("#normVal").textContent = S.norm===1 ? "Average" : S.norm===0 ? "Sum" : S.norm.toFixed(2);
+  render();
 };
 $("#ev").oninput = e=>{
   S.ev = +e.target.value;
   $("#evVal").textContent = (S.ev>0?"+":"") + S.ev.toFixed(2);
   render();
 };
+$("#fit").onclick = fitExposure;
+$("#linear").onchange = e=>{
+  S.linear = e.target.checked; buildIn(); buildOut();
+  if(S.frames.length){ setRange(S.a,S.b,true); }
+  render();
+};
+$("#soft").onchange = e=>{ S.soft = e.target.checked; buildOut(); render(); };
 $("#lockWin").onchange = e=>{
   S.lockWin = e.target.checked;
-  if(S.lockWin && S.frames.length){
-    setRange(Math.max(0,S.b-S.winLen+1), S.b); render(); drawStrip(); updateUI();
-  }
+  if(S.lockWin && S.frames.length){ setRange(Math.max(0,S.b-S.winLen+1), S.b); render(); drawStrip(); updateUI(); }
 };
 $("#winLen").oninput = e=>{
   S.winLen = +e.target.value;
   $("#winVal").textContent = S.winLen + "f";
-  if(S.lockWin && S.frames.length){
-    setRange(Math.max(0,S.b-S.winLen+1), S.b); render(); drawStrip(); updateUI();
-  }
+  if(S.lockWin && S.frames.length){ setRange(Math.max(0,S.b-S.winLen+1), S.b); render(); drawStrip(); updateUI(); }
 };
 
-/* capture settings */
 $("#resSeg").onclick = e=>{
   const b = e.target.closest("button[data-w]"); if(!b) return;
   [...$("#resSeg").children].forEach(x=>x.setAttribute("aria-pressed", String(x===b)));
@@ -681,7 +699,6 @@ $("#torch").onchange = async e=>{
 };
 $("#clear").onclick = ()=>{ if(S.recording) stopRec(); clearFrames(); status("Cleared."); };
 
-/* wake lock */
 async function requestWake(){
   try{ if("wakeLock" in navigator) S.wake = await navigator.wakeLock.request("screen"); }catch(e){}
 }
@@ -704,7 +721,6 @@ $("#savePng").onclick = ()=>{
     status("Image saved.");
   }, "image/png");
 };
-
 function pickMime(){
   if(typeof MediaRecorder === "undefined") return null;
   return ["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm","video/mp4"]
@@ -727,15 +743,14 @@ $("#saveVid").onclick = async ()=>{
     const u = URL.createObjectURL(blob), el = document.createElement("a");
     el.href = u; el.download = "accumulator-" + stamp() + (mime.includes("mp4")?".mp4":".webm"); el.click();
     setTimeout(()=>URL.revokeObjectURL(u), 6000);
-    S.exporting = false;
-    status("Build exported.");
+    S.exporting = false; status("Build exported.");
     setRange(a,bEnd); render(); drawStrip(); updateUI();
   };
   rec.start();
   const step = 1000/S.fps;
   for(let i=a;i<=bEnd;i++){
-    const from = S.lockWin ? Math.max(a, i-S.winLen+1) : a;
-    setRange(from,i); render();
+    setRange(S.lockWin ? Math.max(a, i-S.winLen+1) : a, i);
+    render();
     if(vtrack.requestFrame) vtrack.requestFrame();
     S.head = i; drawStrip();
     status("Exporting " + Math.round((i-a)/(bEnd-a||1)*100) + "%");
@@ -744,7 +759,6 @@ $("#saveVid").onclick = async ()=>{
   rec.stop();
 };
 
-/* install */
 let installEvt = null;
 addEventListener("beforeinstallprompt", e=>{
   e.preventDefault(); installEvt = e; $("#installRow").hidden = false;
@@ -755,9 +769,7 @@ $("#install").onclick = async ()=>{
   installEvt = null; $("#installRow").hidden = true;
 };
 
-/* boot */
 $("#capVal").textContent = Math.round(S.maxFrames/S.fps) + "s";
-$("#cap").value = S.maxFrames;
 updateUI(); drawStrip();
 if("serviceWorker" in navigator){
   const had = !!navigator.serviceWorker.controller;

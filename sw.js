@@ -1,4 +1,4 @@
-const VERSION = "accumulator-v2";
+const VERSION = "accumulator-v3";
 const SHELL = [
   "./",
   "./index.html",
