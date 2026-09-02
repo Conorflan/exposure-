@@ -69,7 +69,7 @@ button{background:none;border:0;padding:0;cursor:pointer}
 #gate.hide{display:none}
 
 /* ---------- density strip / trim ---------- */
-#trim{position:relative;height:76px;background:var(--ink2);border-top:1px solid var(--line);
+#trim{position:relative;height:92px;background:var(--ink2);border-top:1px solid var(--line);
   border-bottom:1px solid var(--line);touch-action:none;user-select:none;overflow:hidden}
 #strip{position:absolute;inset:0;width:100%;height:100%;display:block}
 .handle{position:absolute;top:0;bottom:0;width:2px;background:var(--rust);pointer-events:none}
@@ -142,7 +142,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--rust)}
   <div class="handle a" id="hA" hidden></div>
   <div class="handle b" id="hB" hidden></div>
   <div id="playhead" hidden></div>
-  <div id="trimEmpty">Nothing recorded yet</div>
+  <div id="trimEmpty">Record something and your clip appears here</div>
 </div>
 
 <div id="readout">
@@ -244,13 +244,15 @@ const out   = $("#out");
 const octx  = out.getContext("2d");
 const cap   = document.createElement("canvas");
 const cctx  = cap.getContext("2d",{willReadFrequently:true});
+const tcan  = document.createElement("canvas");
+const tctx  = tcan.getContext("2d",{willReadFrequently:true});
 const strip = $("#strip");
 const sctx  = strip.getContext("2d");
 
 const S = {
   stream:null, track:null, devices:[], devId:null, facing:"environment",
   W:0, H:0, aspect:3/4,
-  frames:[], lum:[], maxFrames:360, fps:12,
+  frames:[], lum:[], mot:[], thumbs:[], tw:96, th:72, maxFrames:360, fps:12,
   acc:null, img:null, accA:-1, accB:-1,
   a:0, b:-1,
   mode:"mean", ev:0,
@@ -274,6 +276,12 @@ async function startCamera(){
     video.srcObject = S.stream;
     await video.play();
     S.track = S.stream.getVideoTracks()[0];
+    if(!video.videoWidth){
+      await new Promise(r=>{
+        const done=()=>{ video.removeEventListener("loadedmetadata",done); r(); };
+        video.addEventListener("loadedmetadata",done); setTimeout(done,1500);
+      });
+    }
     S.devId = S.track.getSettings().deviceId || S.devId;
     $("#torch").checked = false;
     $("#gate").classList.add("hide");
@@ -308,13 +316,15 @@ function checkTorch(){
 }
 function setGeometry(){
   const st = S.track.getSettings();
-  const vw = st.width || video.videoWidth || 1280;
-  const vh = st.height || video.videoHeight || 720;
+  const vw = video.videoWidth || st.width || 1280;
+  const vh = video.videoHeight || st.height || 720;
   S.aspect = vw/vh;
   $("#frame").style.aspectRatio = vw + "/" + vh;
   const target = +document.querySelector("#resSeg [aria-pressed=true]").dataset.w;
   const W = Math.min(target, vw);
   const H = Math.max(2, Math.round(W/S.aspect/2)*2);
+  S.tw = 112; S.th = Math.max(2, Math.round(112/S.aspect/2)*2);
+  tcan.width = S.tw; tcan.height = S.th;
   if(W !== S.W || H !== S.H){
     S.W = W; S.H = H;
     cap.width = out.width = W; cap.height = out.height = H;
@@ -326,7 +336,7 @@ function setGeometry(){
 
 /* ---------------- buffer ---------------- */
 function clearFrames(){
-  S.frames.length = 0; S.lum.length = 0;
+  S.frames.length = 0; S.lum.length = 0; S.mot.length = 0; S.thumbs.length = 0;
   S.accA = S.accB = -1; S.a = 0; S.b = -1; S.head = 0; S.play = 0;
   out.classList.remove("on");
   drawStrip(); updateUI();
@@ -337,14 +347,23 @@ function grab(){
   cctx.drawImage(video,0,0,W,H);
   const d = cctx.getImageData(0,0,W,H).data;
   const f = new Uint8ClampedArray(W*H*3);
-  let sum = 0;
-  for(let i=0,j=0; i<d.length; i+=4){
+  const prev = S.frames.length ? S.frames[S.frames.length-1] : null;
+  let sum = 0, mot = 0, mn = 0;
+  for(let i=0,j=0; i<d.length; i+=4, j+=3){
     const r=d[i], g=d[i+1], b=d[i+2];
-    f[j++]=r; f[j++]=g; f[j++]=b;
+    f[j]=r; f[j+1]=g; f[j+2]=b;
     sum += (r*77 + g*150 + b*29) >> 8;
+    if(prev && (j % 12) === 0){
+      mot += Math.abs(r-prev[j]) + Math.abs(g-prev[j+1]) + Math.abs(b-prev[j+2]);
+      mn++;
+    }
   }
   S.frames.push(f);
   S.lum.push(sum/(W*H)/255);
+  S.mot.push(mn ? mot/(mn*765) : 0);
+  if(S.mot.length === 2) S.mot[0] = S.mot[1];
+  tctx.drawImage(cap, 0, 0, S.tw, S.th);
+  S.thumbs.push(tctx.getImageData(0,0,S.tw,S.th));
 }
 
 /* ---------------- accumulation ---------------- */
@@ -435,73 +454,108 @@ requestAnimationFrame(loop);
 
 /* ---------------- density strip ---------------- */
 function drawStrip(){
-  const r = strip.getBoundingClientRect();
+  const r = trim.getBoundingClientRect();
   const dpr = Math.min(devicePixelRatio||1, 2);
-  const w = Math.max(1, Math.round(r.width*dpr)), h = Math.max(1, Math.round(r.height*dpr));
-  if(strip.width!==w || strip.height!==h){ strip.width=w; strip.height=h; }
-  sctx.clearRect(0,0,w,h);
+  const bw = Math.max(1, Math.round(r.width*dpr)), bh = Math.max(1, Math.round(r.height*dpr));
+  if(strip.width!==bw || strip.height!==bh){ strip.width=bw; strip.height=bh; }
+  sctx.setTransform(dpr,0,0,dpr,0,0);
+  const W = r.width, H = r.height;
+  sctx.clearRect(0,0,W,H);
+
   const N = S.frames.length;
   $("#trimEmpty").hidden = N>0;
-  if(!N){ $("#hA").hidden = $("#hB").hidden = $("#playhead").hidden = true; return; }
+  const hA=$("#hA"), hB=$("#hB"), ph=$("#playhead");
+  if(!N){ hA.hidden = hB.hidden = ph.hidden = true; return; }
 
-  const cols = w;
-  const per = N/cols;
-  for(let x=0;x<cols;x++){
-    const i0 = Math.floor(x*per), i1 = Math.max(i0+1, Math.floor((x+1)*per));
-    let m = 0;
-    for(let i=i0;i<Math.min(i1,N);i++) if(S.lum[i]>m) m = S.lum[i];
-    const inR = i0 >= S.a && i0 <= S.b;
-    const v = Math.pow(m, 0.6);
-    // column tint: deep blue → paper, like density on a strip
-    const rr = Math.round(10 + v*222), gg = Math.round(31 + v*197), bb = Math.round(50 + v*167);
-    sctx.fillStyle = inR ? `rgb(${rr},${gg},${bb})` : `rgba(${rr},${gg},${bb},0.22)`;
-    sctx.fillRect(x,0,1,h);
-    const y = h - v*(h-4) - 2;
-    sctx.fillStyle = inR ? "#E8E4D9" : "rgba(232,228,217,0.25)";
-    sctx.fillRect(x, y, 1, 1.5*dpr);
+  const filmH = Math.round(H*0.64), traceH = H - filmH;
+
+  // --- filmstrip: real thumbnails, one per slot across the clip ---
+  const tw = Math.max(30, Math.round(filmH * (S.tw/S.th)));
+  const slots = Math.max(1, Math.ceil(W/tw));
+  sctx.save();
+  sctx.beginPath(); sctx.rect(0,0,W,filmH); sctx.clip();
+  for(let c=0;c<slots;c++){
+    const f = slots===1 ? 0 : ((c+0.5)*tw)/W;
+    const i = Math.min(N-1, Math.max(0, Math.round(f*(N-1))));
+    const th = S.thumbs[i];
+    if(!th) continue;
+    tctx.putImageData(th,0,0);
+    sctx.drawImage(tcan, c*tw, 0, tw, filmH);
   }
-  const px = i => (N<=1 ? 0 : (i/(N-1))*r.width);
-  const hA = $("#hA"), hB = $("#hB"), ph = $("#playhead");
+  sctx.restore();
+  sctx.fillStyle = "rgba(30,58,82,0.55)";
+  for(let c=1;c<slots;c++) sctx.fillRect(c*tw, 0, 1, filmH);
+
+  // --- activity trace: frame-to-frame change, auto-scaled to the clip ---
+  sctx.fillStyle = "#0A1622";
+  sctx.fillRect(0, filmH, W, traceH);
+  let peak = 0;
+  for(let i=0;i<N;i++) if(S.mot[i]>peak) peak = S.mot[i];
+  if(peak < 0.004) peak = 0.004;
+  const base = H - 1;
+  sctx.beginPath();
+  sctx.moveTo(0, base);
+  for(let x=0;x<=W;x++){
+    const i = Math.min(N-1, Math.floor((x/W)*N));
+    const v = Math.min(1, S.mot[i]/peak);
+    sctx.lineTo(x, base - v*(traceH-3));
+  }
+  sctx.lineTo(W, base);
+  sctx.closePath();
+  sctx.fillStyle = "#3C6E97";
+  sctx.fill();
+
+  // --- range: everything outside the exposure is held back ---
+  const xa = (S.a/N)*W, xb = ((S.b+1)/N)*W;
+  sctx.fillStyle = "rgba(10,22,34,0.76)";
+  sctx.fillRect(0,0,xa,H);
+  sctx.fillRect(xb,0,W-xb,H);
+  sctx.fillStyle = "#C05A34";
+  sctx.fillRect(xa, 0, Math.max(1,xb-xa), 2);
+
   hA.hidden = hB.hidden = false;
-  hA.style.left = px(S.a) + "px";
-  hB.style.left = px(S.b) + "px";
-  ph.hidden = false;
-  ph.style.left = px(S.head) + "px";
+  hA.style.left = xa + "px";
+  hB.style.left = (xb-2) + "px";
+  ph.hidden = S.b < 0;
+  ph.style.left = (((S.head+0.5)/N)*W) + "px";
 }
 addEventListener("resize", ()=>drawStrip());
 
 /* ---------------- trim interaction ---------------- */
 let drag = null, pending = null;
 const trim = $("#trim");
-function idxAt(clientX){
+function localX(clientX){
   const r = trim.getBoundingClientRect();
-  const N = S.frames.length;
-  if(N<=1) return 0;
-  return clamp((clientX - r.left)/r.width, 0, 1) * (N-1);
+  return clamp(clientX - r.left, 0, r.width);
+}
+function xToIdx(x){
+  const r = trim.getBoundingClientRect(), N = S.frames.length;
+  return clamp(Math.floor((x/r.width)*N), 0, N-1);
 }
 trim.addEventListener("pointerdown", e=>{
   if(!S.frames.length || S.recording) return;
   trim.setPointerCapture(e.pointerId);
-  const i = idxAt(e.clientX);
-  const dA = Math.abs(i-S.a), dB = Math.abs(i-S.b);
-  const r = trim.getBoundingClientRect();
-  const grabPx = (S.frames.length-1) * (26/r.width);
-  if(dA<dB && dA<grabPx) drag = {h:"a"};
-  else if(dB<=dA && dB<grabPx) drag = {h:"b"};
-  else if(i>S.a && i<S.b) drag = {h:"both", off:i, a:S.a, b:S.b};
-  else drag = {h: i<S.a ? "a" : "b"};
+  const r = trim.getBoundingClientRect(), N = S.frames.length;
+  const x = localX(e.clientX);
+  const xa = (S.a/N)*r.width, xb = ((S.b+1)/N)*r.width;
+  const dA = Math.abs(x-xa), dB = Math.abs(x-xb);
+  if(dA <= dB && dA < 26) drag = {h:"a"};
+  else if(dB < 26) drag = {h:"b"};
+  else if(x > xa && x < xb) drag = {h:"both", off:xToIdx(x), a:S.a, b:S.b};
+  else drag = {h: x < xa ? "a" : "b"};
   S.play = 0;
-  onDrag(i);
+  onDrag(x);
 });
-trim.addEventListener("pointermove", e=>{ if(drag) onDrag(idxAt(e.clientX)); });
+trim.addEventListener("pointermove", e=>{ if(drag) onDrag(localX(e.clientX)); });
 ["pointerup","pointercancel"].forEach(ev=>trim.addEventListener(ev, ()=>{ drag=null; }));
 
-function onDrag(i){
+function onDrag(x){
   if(!drag) return;
-  if(drag.h==="a"){ S.a = clamp(Math.round(i), 0, S.b); }
-  else if(drag.h==="b"){ S.b = clamp(Math.round(i), S.a, S.frames.length-1); S.head = S.b; }
+  const i = xToIdx(x);
+  if(drag.h==="a"){ S.a = clamp(i, 0, S.b); }
+  else if(drag.h==="b"){ S.b = clamp(i, S.a, S.frames.length-1); S.head = S.b; }
   else{
-    const d = Math.round(i - drag.off);
+    const d = i - drag.off;
     const len = drag.b - drag.a;
     let a = clamp(drag.a + d, 0, S.frames.length-1-len);
     S.a = a; S.b = a + len; S.head = S.b;
@@ -706,6 +760,11 @@ $("#capVal").textContent = Math.round(S.maxFrames/S.fps) + "s";
 $("#cap").value = S.maxFrames;
 updateUI(); drawStrip();
 if("serviceWorker" in navigator){
+  const had = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+    if(had && !reloaded){ reloaded = true; location.reload(); }
+  });
   addEventListener("load", ()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
 }
 </script>
